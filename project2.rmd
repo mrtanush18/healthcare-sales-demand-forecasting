@@ -1,0 +1,338 @@
+---
+title: "Midterm Submission"
+author: "Tanush Shetty"
+email : "ts1333@scarletmail.rutgers.edu"
+date: "04/11/2024"
+output: html_document
+---
+
+```{r}
+library(fpp)
+library(fpp2)
+library(dplyr)
+library(forecast)
+library(ggplot2)
+library(readr)
+
+# import data
+data <- read_csv("C:/Users/tanus/Downloads/sales.csv", col_names = FALSE)
+
+# Rename columns
+colnames(data) <- c("Date", "Sales")
+
+# Convert Date to Date type
+data$Date <- as.Date(data$Date, format="%m/%d/%y")
+
+str(data)
+head(data)
+
+library(ggplot2)
+
+# Convert Date to Date type
+data$Date <- as.Date(data$Date, format="%m/%d/%y")
+
+# Plot the time series
+ggplot(data, aes(x=Date, y=Sales)) +
+  geom_line(color="blue") +
+  labs(title="Sales Over Time", x="Date", y="Sales") +
+  theme_minimal()
+
+# There is a clear upward trend in sales from 2020 through 2023, indicating consistent growth over time. This suggests that the business may be expanding, or there is increasing demand for the product/service being sold.
+
+
+# Central Tendency
+
+# Calculate summary statistics
+summary_stats <- summary(data$Sales)
+
+# Display results
+summary_stats
+
+# Create a box plot of the Sales data
+ggplot(data, aes(y = Sales)) +
+  geom_boxplot(fill = "skyblue", color = "darkblue") +
+  labs(title = "Box Plot of Sales Data", y = "Sales") +
+  theme_minimal()
+
+# The median sales value (middle line in the box) appears around 9,000 to 10,000. This gives us an idea of the central sales performance, which is moderately high.The box plot suggests that the sales data is fairly spread out, with no extreme deviations. The data has a fairly large interquartile range (IQR), indicating variability in sales around the median.
+
+
+# Decomposition
+
+# Convert the data to a time series object 
+sales_ts <- ts(data$Sales, start = c(2020, 1), frequency = 12)
+
+# Decompose the time series
+decomposed_sales <- decompose(sales_ts)
+
+# Plot the decomposition
+plot(decomposed_sales)
+
+# Yes, the time series appears to have a seasonal component. Based on the decomposition, the seasonal plot shows a repeating pattern over time, with regular fluctuations occurring at consistent intervals. This repeating pattern confirms that the time series has seasonality.
+
+# The decomposition here is additive.
+
+# values of the seasonal monthly indices
+# Extract the seasonal component
+seasonal_indices <- decomposed_sales$seasonal
+
+# Display the unique monthly seasonal indices
+unique(seasonal_indices)
+
+# The month with the highest seasonal index is June, with an index value of 2103.19539. This indicates a peak period with significant activity or sales in June. The month with the lowest seasonal index is January, with an index value of -1381.64640, suggesting a substantial drop in activity or sales during this month. These trends could be due to industry-specific factors such as summer promotions, end-of-quarter effects, or post-holiday slowdowns in January
+
+# Seasonally adjusted series: actual minus the seasonal component
+seasonally_adjusted <- sales_ts - decomposed_sales$seasonal
+
+# Plot actual time series
+plot(sales_ts, col = "blue", lwd = 2, ylab = "Sales", main = "Actual vs Seasonally Adjusted Time Series")
+
+# Add the seasonally adjusted series to the plot
+lines(seasonally_adjusted, col = "red", lwd = 2)
+
+# legend
+legend("topright", legend = c("Actual", "Seasonally Adjusted"), col = c("blue", "red"), lwd = 2)
+
+# Naïve Method
+
+# Apply the Naïve method to the time series
+naive_forecast <- naive(sales_ts, h = 12)  # forecast for next 12 months)
+
+# output
+plot(naive_forecast, main = "Naïve Forecast for Monthly Sales Time Series", col.main = "blue")
+
+# Extract and clean residuals
+residuals_naive <- residuals(naive_forecast)
+residuals_naive <- residuals_naive[is.finite(residuals_naive)]  # Ensure residuals are finite
+
+# Ensure the cleaned residuals are a time series object with the same frequency
+residuals_naive <- ts(residuals_naive, frequency = 12)
+
+# Align lengths of sales_ts and residuals_naive
+length_fit <- min(length(sales_ts), length(residuals_naive))
+sales_ts_aligned <- sales_ts[1:length_fit]
+residuals_naive_aligned <- residuals_naive[1:length_fit]
+
+# Perform Residual Analysis
+# 1. Plot of Residuals
+plot(residuals_naive_aligned, main = "Residuals from Naïve Method", ylab = "Residuals", xlab = "Time", col = "blue")
+abline(h = 0, col = "red", lty = 2)
+
+# The residuals don't seem to follow a clear pattern. They are scattered around the zero line, which suggests that the naïve method is not capturing any systematic patterns in the data. The plot suggests that the naïve method is not a very good fit for this data.
+
+# 2. Histogram of Residuals
+hist(residuals_naive_aligned, main = "Histogram of Residuals", xlab = "Residuals", col = "lightblue", border = "black")
+
+# The histogram suggests that the model has a decent fit to the data. The residuals are normally distributed, but the wide spread indicates that the model's predictions are not always very accurate.
+
+# 3. Fitted Values vs. Residuals
+fitted_values <- fitted(naive_forecast)
+fitted_values_aligned <- fitted_values[1:length_fit]
+plot(fitted_values_aligned, residuals_naive_aligned, main = "Fitted Values vs. Residuals", xlab = "Fitted Values", ylab = "Residuals", col = "blue")
+abline(h = 0, col = "red", lty = 2)
+
+# The residuals are mostly scattered around zero, indicating that the model fits the data reasonably well. However, there are a few points that deviate from the line, which might suggest some outliers or potential issues with the model.
+
+# 4. Actual Values vs. Residuals
+plot(sales_ts_aligned, residuals_naive_aligned, main = "Actual Values vs. Residuals", xlab = "Actual Values", ylab = "Residuals", col = "purple")
+abline(h = 0, col = "red", lty = 2)
+
+# The residuals are mostly scattered around zero, indicating that the model fits the data reasonably well. However, there are a few points that deviate from the line, which might suggest some outliers or potential issues with the model.
+
+# 5. ACF Plot of Residuals
+acf(residuals_naive_aligned, main = "ACF of Residuals from Naïve Method")
+
+# In this plot, there are a few bars that extend beyond the confidence intervals, suggesting that there might be some autocorrelation present in the residuals which may indicate that the model is not capturing all the information in the data. This could lead to inaccurate forecasts.
+
+# 5 measures of accuracy
+
+# Split the data into training and test sets
+train_length <- length(sales_ts) - 12  
+train_ts <- window(sales_ts, end = c(2020 + (train_length - 1) %/% 12, (train_length - 1) %% 12 + 1))
+test_ts <- window(sales_ts, start = c(2020 + train_length %/% 12, train_length %% 12 + 1))
+
+# Apply the Naive method on the training data
+naive_forecast <- naive(train_ts, h = length(test_ts))
+
+# Calculate accuracy metrics on the test data
+naive_accuracy <- accuracy(naive_forecast, test_ts)
+
+# Print accuracy metrics
+print(naive_accuracy)
+
+# Display forecasted values in a table
+forecast_table <- data.frame(
+  Month = time(naive_forecast$mean),
+  Forecast = as.vector(naive_forecast$mean)
+)
+
+# Print the forecasted values
+print(forecast_table)
+
+# Plot the forecast
+plot(naive_forecast, main = "Naïve Forecast for Next 12 Months", col.main = "blue")
+
+
+# The Naive forecasting technique serves as a simple benchmark, often used to compare against more complex models. While its simplicity is a strength, it can be limited in accuracy, especially for data with trends or seasonality. 
+# 
+# What Does it Predict the Time Series Value Will Be in One Year?
+# The Naive forecasting technique predicts that the future values will be the same as the most recent observed value.
+
+# Simple Moving Averages (SMA)
+
+sma_3 <- stats::filter(sales_ts, rep(1/3, 3), sides = 2)  # 3-month SMA
+sma_6 <- stats::filter(sales_ts, rep(1/6, 6), sides = 2)  # 6-month SMA
+sma_9 <- stats::filter(sales_ts, rep(1/9, 9), sides = 2)  # 9-month SMA
+
+# Handle NA values generated by the moving averages
+sma_3[is.na(sma_3)] <- mean(sales_ts, na.rm = TRUE)
+sma_6[is.na(sma_6)] <- mean(sales_ts, na.rm = TRUE)
+sma_9[is.na(sma_9)] <- mean(sales_ts, na.rm = TRUE)
+
+# Add the SMA to the plot
+lines(sma_3, col = "red", lwd = 2, type = "l")  # 3-month SMA in red
+lines(sma_6, col = "blue", lwd = 2, type = "l")  # 6-month SMA in blue
+lines(sma_9, col = "green", lwd = 2, type = "l")  # 9-month SMA in green
+
+# Add a legend to the plot
+legend("topright", legend = c("Original", "3-Month SMA", "6-Month SMA", "9-Month SMA"), col = c("black", "red", "blue", "green"), lwd = 2)
+
+# As the moving average order goes up, the plot becomes smoother, introduces more lag, better identifies trends, and reduces apparent volatility. This makes higher-order SMAs useful for long-term trend analysis, while lower-order SMAs can provide more detail on short-term variations.
+
+# Simple Smoothing
+ses_model <- ses(sales_ts, h = 12)
+
+# Extract the values of alpha, initial state, and sigma
+alpha <- ses_model$model$par["alpha"]
+initial_state <- ses_model$model$states[1, "l"]
+sigma <- sqrt(ses_model$model$sigma2)
+
+# Print the values
+print(paste("Alpha (α):", alpha))
+print(paste("Initial State:", initial_state))
+print(paste("Sigma:", sigma))
+
+# Plot the forecast
+plot(ses_model, main = "Simple Smoothing Forecast", col.main = "blue")
+
+# Extract residuals
+residuals_ses <- residuals(ses_model)
+
+# Plot of Residuals
+plot(residuals_ses, main = "Residuals from SES", ylab = "Residuals", xlab = "Time", col = "blue")
+abline(h = 0, col = "red", lty = 2)
+
+# Histogram of Residuals
+hist(residuals_ses, main = "Histogram of Residuals", xlab = "Residuals", col = "lightblue", border = "black")
+
+# Fitted Values vs. Residuals
+fitted_values_ses <- fitted(ses_model)
+plot(fitted_values_ses, residuals_ses, main = "Fitted Values vs. Residuals", xlab = "Fitted Values", ylab = "Residuals", col = "blue")
+abline(h = 0, col = "red", lty = 2)
+
+# Actual Values vs. Residuals
+plot(sales_ts, residuals_ses, main = "Actual Values vs. Residuals", xlab = "Actual Values", ylab = "Residuals", col = "purple")
+abline(h = 0, col = "red", lty = 2)
+
+# ACF Plot of Residuals
+acf(residuals_ses, main = "ACF of Residuals from SES")
+
+
+# Calculate accuracy metrics
+ses_accuracy_metrics <- accuracy(ses_model)
+
+ses_accuracy_metrics
+
+# Extract the forecasted values
+forecast_values <- ses_model$mean
+
+# Create a table with forecasted values
+forecast_table <- data.frame(
+  Month = time(forecast_values),
+  Forecast = as.vector(forecast_values)
+)
+
+# Print the forecasted values
+print(forecast_table)
+
+# Plot the forecast
+plot(ses_model, main = "Simple Exponential Smoothing Forecast for Next 12 Months", col.main = "blue")
+
+# Based on the forecast results, the SES method predicts that the time series value will stabilize around 14075.16 over the next year. Simple Exponential Smoothing is a robust technique for data without significant trends or seasonality, providing a balance between simplicity and accuracy.
+
+# Holt-Winters
+hw_model <- hw(sales_ts, h = 12, seasonal = "multiplicative")
+
+# Extract parameters
+alpha <- hw_model$model$par["alpha"] # Controls the rate at which the influence of past observations declines for the level component.
+beta <- hw_model$model$par["beta"] # Controls the rate at which the influence of past observations declines for the trend component.
+gamma <- hw_model$model$par["gamma"] # Controls the rate at which the influence of past observations declines for the seasonal component.
+
+# Inspect the states of the model to identify correct names
+print(hw_model$model$states)
+
+# Extract initial states based on identified names
+level <- hw_model$model$states[1, "l"]  # Level component
+trend <- hw_model$model$states[1, "b"]  # Trend component
+seasonal <- hw_model$model$states[1, "s1"]  # Seasonal component
+
+# Extract sigma
+sigma <- sqrt(hw_model$model$sigma2) # Provides a measure of the uncertainty associated with the forecast.
+
+# Print the values
+print(paste("Alpha (α):", alpha))
+print(paste("Beta (β):", beta))
+print(paste("Gamma (γ):", gamma))
+print(paste("Initial Level:", level))
+print(paste("Initial Trend:", trend))
+print(paste("Initial Seasonality:", seasonal))
+print(paste("Sigma:", sigma))
+
+# Plot the forecast
+plot(hw_model, main = "Holt-Winters Forecast for Next 12 Months", col.main = "blue")
+
+# Extract residuals
+residuals_hw <- residuals(hw_model)
+
+# Plot of Residuals
+plot(residuals_hw, main = "Residuals from Holt-Winters Method", ylab = "Residuals", xlab = "Time", col = "blue")
+abline(h = 0, col = "red", lty = 2)
+# This plot shows the residuals over time.
+
+# Histogram of Residuals
+hist(residuals_hw, main = "Histogram of Residuals", xlab = "Residuals", col = "lightblue", border = "black")
+
+# Fitted Values vs. Residuals
+fitted_values_hw <- fitted(hw_model)
+plot(fitted_values_hw, residuals_hw, main = "Fitted Values vs. Residuals", xlab = "Fitted Values", ylab = "Residuals", col = "blue")
+abline(h = 0, col = "red", lty = 2)
+
+# Actual Values vs. Residuals
+plot(sales_ts, residuals_hw, main = "Actual Values vs. Residuals", xlab = "Actual Values", ylab = "Residuals", col = "purple")
+abline(h = 0, col = "red", lty = 2)
+
+# ACF Plot of Residuals
+acf(residuals_hw, main = "ACF of Residuals from Holt-Winters Method")
+
+# Calculate accuracy metrics
+hw_accuracy_metrics <- accuracy(hw_model)
+
+hw_accuracy_metrics
+
+# Extract forecasted values
+forecast_values <- hw_model$mean
+
+# Create a table with forecasted values
+forecast_table <- data.frame(
+  Month = time(forecast_values),
+  Forecast = as.vector(forecast_values)
+)
+
+# Print the forecasted values
+print(forecast_table)
+
+# Plot the forecast
+plot(hw_model, main = "Holt-Winters Forecast for Next 12 Months", col.main = "blue")
+
+
+```
